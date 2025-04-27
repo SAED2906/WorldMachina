@@ -120,5 +120,4 @@ https://buymeacoffee.com/williammarais
 I created this project during my computer science studies and out of my love for tabletop role-playing games. While developing a custom Pathfinder module, I wanted a scientifically accurate world to base it on, which led me to *try* build this physically-based planet generator.
 
 ## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the LICENSE file for details.
