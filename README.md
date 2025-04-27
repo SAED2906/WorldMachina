@@ -1,6 +1,6 @@
 # WorldMachina: Physically Accurate Planet Generation & Visualization
 
-PlanetViewer is an interactive 3D application for generating and visualizing physically accurate planetary terrain using tectonic plate simulation. Perfect for my TTRPG world-building (I hope), scientific visualization, or anyone interested in procedural planet generation.
+WorldMachina is an interactive 3D application for generating and visualizing physically accurate planetary terrain using tectonic plate simulation. Perfect for my TTRPG world-building (I hope), scientific visualization, or anyone interested in procedural planet generation.
 
 ## Features
 
@@ -48,7 +48,7 @@ CXXFLAGS="-std=c++14" pip install PyPlatec
 
 The PyPlatec installation requires C++14 support, which is why we use the CXXFLAGS environment variable.
 
-### Running PlanetViewer
+### Running WorldMachina
 
 Launch the application by running the main script (make sure your virtual environment is activated):
 
