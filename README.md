@@ -39,13 +39,6 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Or install dependencies manually:
-
-```bash
-pip install pygame pyopengl numpy matplotlib pillow
-CXXFLAGS="-std=c++14" pip install PyPlatec
-```
-
 The PyPlatec installation requires C++14 support, which is why we use the CXXFLAGS environment variable.
 
 ### Running WorldMachina
