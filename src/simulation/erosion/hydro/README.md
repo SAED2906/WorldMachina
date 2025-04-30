@@ -2,6 +2,14 @@
 
 A ok~ish-performance, memory-efficient hydraulic erosion simulator for creating realistic terrain at massive scales.
 
+## Current Limitations
+<p align="center">
+  <img src="heightmap_bwsqr.png" width="45%" alt="Input Heightmap">
+  <img src="detailed_erosion_scale2.0_hillshade.png" width="45%" alt="After Erosion Simulation">
+</p>
+
+The images above demonstrates the erosion simulator working properly on a smaller heightmap. This smooth operation is typical for images up to 2048×2048 pixels, particularly at moderate scale factors (2-4x). For larger heightmaps or higher scale factors (8x+), you may encounter memory errors or stability issues as this version still has limitations with extremely large datasets. I'm working on optimizing the memory handling for massive terrains, but in the meantime, using the `--swap` and `--max-memory` options with reasonable tile sizes will help mitigate these issues. If processing very large heightmaps, consider downsampling your input or processing it in sections.
+
 ## Overview
 
 This tool simulates the natural processes of hydraulic erosion to create realistic terrain heightmaps with detailed river valleys, mountain ridges, and natural-looking landscapes. It uses a tiled processing approach to handle extremely large maps efficiently, even on systems with limited RAM.
