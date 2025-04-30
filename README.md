@@ -97,8 +97,6 @@ The UI components in `src/ui/` handle things like the texture selector. The simu
 
 ## Roadmap
 
-## Roadmap
-
 Future development plans include enhancing the erosion simulation to create more realistic terrain weathering effects like river valleys, deltas, and coastline features. I'm currently working on adding fractal detail to large-scale tectonic features for more natural-looking terrain at various zoom levels, and implementing different rock types and terrain properties based on formation processes.
 
 Building on the early climate simulation work I've started, I plan to develop a full global climate system with temperature, pressure, and wind patterns. This will include rainfall calculation that properly considers topography, creating realistic rain shadows behind mountains. The climate system will ultimately generate biome classifications based on temperature and precipitation values, allowing for realistic environmental distribution across the planet. I also want to create atmospheric rendering effects that vary with the climate conditions.

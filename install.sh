@@ -15,7 +15,7 @@ if ! command -v pip &> /dev/null; then
 fi
 
 echo "Installing Python dependencies..."
-pip install pygame pyopengl numpy matplotlib pillow
+pip install -r requirements.txt
 
 echo "Installing PyPlatec (tectonic plate simulation library)..."
 # Set C++14 flag for PyPlatec compilation
