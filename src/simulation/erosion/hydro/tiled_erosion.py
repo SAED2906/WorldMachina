@@ -59,7 +59,7 @@ def safe_fbm(shape, p, lower=-np.inf, upper=np.inf):
         return square_noise[y_offset:y_offset+shape[0], x_offset:x_offset+shape[1]]
 
 def process_tile(args):
-    tile_data, tile_id, full_width, scale_factor, overlap, iterations, verbose, swap_dir = args
+    tile_data, tile_id, full_width, scale_factor, overlap, iterations, verbose, swap_dir, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id = args
     
     tile_height, tile_width = tile_data.shape
     cell_width = full_width / (tile_width * scale_factor)
@@ -133,11 +133,11 @@ def process_tile(args):
     if swap_dir:
         tile_file = os.path.join(swap_dir, f"tile_{tile_id}.npy")
         np.save(tile_file, terrain)
-        return tile_file, tile_id
+        return tile_file, tile_id, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id
     else:
-        return terrain, tile_id
+        return terrain, tile_id, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id
 
-def split_into_tiles(heightmap, tile_size, overlap, scale_factor, max_memory_gb=None):
+def split_into_tiles(heightmap, tile_size, overlap, scale_factor, max_memory_gb=None, wrap_around=True):
     height, width = heightmap.shape
     
     if max_memory_gb:
@@ -147,33 +147,64 @@ def split_into_tiles(heightmap, tile_size, overlap, scale_factor, max_memory_gb=
         
         if total_size_gb > max_memory_gb:
             memory_ratio = max_memory_gb / total_size_gb
-            size_factor = math.sqrt(memory_ratio) * 0.5
+            size_factor = np.sqrt(memory_ratio) * 0.5
             logger.info(f"Memory constraint: {max_memory_gb}GB. Estimated data size: {total_size_gb:.2f}GB")
             logger.info(f"Adjusting tile size by factor: {size_factor:.2f}")
             
             tile_size = min(tile_size, int(tile_size * size_factor))
             tile_size = max(256, tile_size)
     
-    adjusted_tile_size = min(tile_size, int(tile_size / math.sqrt(scale_factor)))
+    adjusted_tile_size = min(tile_size, int(tile_size / np.sqrt(scale_factor)))
     adjusted_tile_size = max(256, adjusted_tile_size)
     
     adjusted_overlap = min(overlap, int(adjusted_tile_size * 0.2))
     
-    n_tiles_y = max(1, int(np.ceil(height / (adjusted_tile_size - adjusted_overlap))))
-    n_tiles_x = max(1, int(np.ceil(width / (adjusted_tile_size - adjusted_overlap))))
+    effective_tile_size = adjusted_tile_size - 2 * adjusted_overlap
+    n_tiles_y = max(1, int(np.ceil(height / effective_tile_size)))
+    n_tiles_x = max(1, int(np.ceil(width / effective_tile_size)))
+    
+    step_y = height / n_tiles_y
+    step_x = width / n_tiles_x
+    
+    logger.info(f"Grid: {n_tiles_y}x{n_tiles_x}, Effective step: {step_y:.1f}x{step_x:.1f}, Overlap: {adjusted_overlap}")
     
     tiles = []
     tile_positions = []
+    tile_metadata = []
     
     for i in range(n_tiles_y):
         for j in range(n_tiles_x):
-            start_y = max(0, i * (adjusted_tile_size - adjusted_overlap))
-            end_y = min(height, start_y + adjusted_tile_size)
+            tile_center_y = int((i + 0.5) * step_y)
+            tile_center_x = int((j + 0.5) * step_x)
             
-            start_x = max(0, j * (adjusted_tile_size - adjusted_overlap))
-            end_x = min(width, start_x + adjusted_tile_size)
+            start_y = int(tile_center_y - step_y/2 - adjusted_overlap)
+            end_y = int(tile_center_y + step_y/2 + adjusted_overlap)
             
-            tile = heightmap[start_y:end_y, start_x:end_x]
+            start_x = int(tile_center_x - step_x/2 - adjusted_overlap)
+            end_x = int(tile_center_x + step_x/2 + adjusted_overlap)
+            
+            if wrap_around:
+                tile_data = np.zeros((end_y - start_y, end_x - start_x), dtype=heightmap.dtype)
+                
+                for oy in range(start_y, end_y):
+                    for ox in range(start_x, end_x):
+                        wrapped_y = oy % height
+                        wrapped_x = ox % width
+                        tile_data[oy - start_y, ox - start_x] = heightmap[wrapped_y, wrapped_x]
+                
+                tile = tile_data
+            else:
+                clip_start_y = max(0, start_y)
+                clip_end_y = min(height, end_y)
+                clip_start_x = max(0, start_x)
+                clip_end_x = min(width, end_x)
+                
+                tile_data = np.zeros((end_y - start_y, end_x - start_x), dtype=heightmap.dtype)
+                tile_data[clip_start_y - start_y:clip_end_y - start_y, clip_start_x - start_x:clip_end_x - start_x] = heightmap[clip_start_y:clip_end_y, clip_start_x:clip_end_x]
+                
+                tile = tile_data
+            
+            original_shape = tile.shape
             
             if tile.shape[0] != tile.shape[1]:
                 max_dim = max(tile.shape)
@@ -182,56 +213,129 @@ def split_into_tiles(heightmap, tile_size, overlap, scale_factor, max_memory_gb=
                 x_offset = (max_dim - tile.shape[1]) // 2
                 square_tile[y_offset:y_offset+tile.shape[0], x_offset:x_offset+tile.shape[1]] = tile
                 tile = square_tile
-                end_y = start_y + tile.shape[0]
-                end_x = start_x + tile.shape[1]
+            
+            is_wrap_x = (start_x < 0) or (end_x > width)
+            is_wrap_y = (start_y < 0) or (end_y > height)
+            
+            wrap_x_tile_id = -1
+            wrap_y_tile_id = -1
+            
+            if is_wrap_x:
+                other_j = (j + n_tiles_x // 2) % n_tiles_x
+                wrap_x_tile_id = i * n_tiles_x + other_j
+            
+            if is_wrap_y:
+                other_i = (i + n_tiles_y // 2) % n_tiles_y
+                wrap_y_tile_id = other_i * n_tiles_x + j
             
             tiles.append(tile)
             tile_positions.append((start_y, end_y, start_x, end_x))
+            tile_metadata.append({
+                'id': i * n_tiles_x + j,
+                'grid_pos': (i, j),
+                'is_wrap_x': is_wrap_x,
+                'is_wrap_y': is_wrap_y,
+                'wrap_x_tile_id': wrap_x_tile_id,
+                'wrap_y_tile_id': wrap_y_tile_id,
+                'original_shape': original_shape,
+                'square_offsets': (
+                    (tile.shape[0] - original_shape[0]) // 2,
+                    (tile.shape[1] - original_shape[1]) // 2
+                )
+            })
     
-    return tiles, tile_positions, n_tiles_y, n_tiles_x, adjusted_tile_size, adjusted_overlap
+    return tiles, tile_positions, n_tiles_y, n_tiles_x, adjusted_tile_size, adjusted_overlap, tile_metadata
 
-def stitch_tiles_from_disk(tile_files, tile_positions, original_shape, n_tiles_y, n_tiles_x, overlap, swap_dir):
+def stitch_tiles_from_disk(tile_files, tile_positions, original_shape, n_tiles_y, n_tiles_x, overlap, swap_dir, tile_metadata, wrap_around=True):
     result = np.zeros(original_shape, dtype=float)
     weights = np.zeros_like(result)
     
-    for i, ((tile_file, _), (start_y, end_y, start_x, end_x)) in enumerate(zip(tile_files, tile_positions)):
+    for idx, ((tile_file, tile_id, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id), (start_y, end_y, start_x, end_x)) in enumerate(zip(tile_files, tile_positions)):
         tile = np.load(tile_file)
         
-        tile_height, tile_width = tile.shape
+        meta = tile_metadata[idx]
+        y_offset, x_offset = meta['square_offsets']
+        original_shape_tile = meta['original_shape']
+        grid_i, grid_j = meta.get('grid_pos', (0, 0))
         
-        end_y = min(start_y + tile_height, original_shape[0])
-        end_x = min(start_x + tile_width, original_shape[1])
+        start_y = int(start_y)
+        end_y = int(end_y)
+        start_x = int(start_x)
+        end_x = int(end_x)
         
-        tile_cropped = tile[:end_y-start_y, :end_x-start_x]
+        if y_offset > 0 or x_offset > 0:
+            tile_cropped = tile[y_offset:y_offset+original_shape_tile[0], x_offset:x_offset+original_shape_tile[1]]
+        else:
+            tile_cropped = tile[:original_shape_tile[0], :original_shape_tile[1]]
         
-        weight_mask = np.ones((end_y - start_y, end_x - start_x))
+        height, width = tile_cropped.shape
         
-        if start_y > 0:
-            for k in range(min(overlap, end_y - start_y)):
-                factor = ((k + 1) / (overlap + 1)) ** 2
-                weight_mask[k, :] = factor
+        if height <= 0 or width <= 0:
+            continue
+        
+        weight_mask = np.ones((height, width))
+        
+        ramp_size = min(overlap, height // 4, 50)
+        for k in range(ramp_size):
+            factor = ((k + 1) / (ramp_size + 1)) ** 2
+            weight_mask[k, :] = factor
+            weight_mask[-(k+1), :] = factor
+            weight_mask[:, k] = factor
+            weight_mask[:, -(k+1)] = factor
+        
+        for sy in range(max(0, start_y), min(original_shape[0], end_y)):
+            for sx in range(max(0, start_x), min(original_shape[1], end_x)):
+                tile_y = sy - start_y
+                tile_x = sx - start_x
+                
+                if 0 <= tile_y < height and 0 <= tile_x < width:
+                    result[sy, sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                    weights[sy, sx] += weight_mask[tile_y, tile_x]
+        
+        if wrap_around:
+            for sy in range(max(0, start_y), min(original_shape[0], end_y)):
+                for sx in range(start_x, 0):
+                    wrap_sx = sx + original_shape[1]
+                    tile_y = sy - start_y
+                    tile_x = sx - start_x
                     
-        if end_y < original_shape[0]:
-            for k in range(min(overlap, end_y - start_y)):
-                factor = ((k + 1) / (overlap + 1)) ** 2
-                weight_mask[-(k+1), :] = factor
+                    if 0 <= tile_y < height and 0 <= tile_x < width:
+                        result[sy, wrap_sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                        weights[sy, wrap_sx] += weight_mask[tile_y, tile_x]
+            
+            for sy in range(max(0, start_y), min(original_shape[0], end_y)):
+                for sx in range(original_shape[1], end_x):
+                    wrap_sx = sx - original_shape[1]
+                    tile_y = sy - start_y
+                    tile_x = sx - start_x
                     
-        if start_x > 0:
-            for k in range(min(overlap, end_x - start_x)):
-                factor = ((k + 1) / (overlap + 1)) ** 2
-                weight_mask[:, k] = factor
+                    if 0 <= tile_y < height and 0 <= tile_x < width:
+                        result[sy, wrap_sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                        weights[sy, wrap_sx] += weight_mask[tile_y, tile_x]
+            
+            for sx in range(max(0, start_x), min(original_shape[1], end_x)):
+                for sy in range(start_y, 0):
+                    wrap_sy = sy + original_shape[0]
+                    tile_y = sy - start_y
+                    tile_x = sx - start_x
                     
-        if end_x < original_shape[1]:
-            for k in range(min(overlap, end_x - start_x)):
-                factor = ((k + 1) / (overlap + 1)) ** 2
-                weight_mask[:, -(k+1)] = factor
-        
-        result[start_y:end_y, start_x:end_x] += tile_cropped * weight_mask
-        weights[start_y:end_y, start_x:end_x] += weight_mask
+                    if 0 <= tile_y < height and 0 <= tile_x < width:
+                        result[wrap_sy, sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                        weights[wrap_sy, sx] += weight_mask[tile_y, tile_x]
+            
+            for sx in range(max(0, start_x), min(original_shape[1], end_x)):
+                for sy in range(original_shape[0], end_y):
+                    wrap_sy = sy - original_shape[0]
+                    tile_y = sy - start_y
+                    tile_x = sx - start_x
+                    
+                    if 0 <= tile_y < height and 0 <= tile_x < width:
+                        result[wrap_sy, sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                        weights[wrap_sy, sx] += weight_mask[tile_y, tile_x]
         
         del tile
         del tile_cropped
-        if i % 10 == 0:
+        if idx % 10 == 0:
             gc.collect()
     
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -239,47 +343,107 @@ def stitch_tiles_from_disk(tile_files, tile_positions, original_shape, n_tiles_y
     
     return result
 
-def stitch_tiles(processed_tiles, tile_positions, original_shape, n_tiles_y, n_tiles_x, overlap):
+def stitch_tiles(processed_tiles, tile_positions, original_shape, n_tiles_y, n_tiles_x, overlap, tile_metadata, wrap_around=True):
     result = np.zeros(original_shape, dtype=float)
     weights = np.zeros_like(result)
     
-    for (tile, (start_y, end_y, start_x, end_x)) in zip(processed_tiles, tile_positions):
-        tile_height, tile_width = tile.shape
+    for idx, ((tile, tile_id, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id), (start_y, end_y, start_x, end_x)) in enumerate(zip(processed_tiles, tile_positions)):
+        meta = tile_metadata[idx]
+        y_offset, x_offset = meta['square_offsets']
+        original_shape_tile = meta['original_shape']
+        grid_i, grid_j = meta.get('grid_pos', (0, 0))
         
-        end_y = min(start_y + tile_height, original_shape[0])
-        end_x = min(start_x + tile_width, original_shape[1])
+        start_y = int(start_y)
+        end_y = int(end_y)
+        start_x = int(start_x)
+        end_x = int(end_x)
         
-        tile_cropped = tile[:end_y-start_y, :end_x-start_x]
+        if y_offset > 0 or x_offset > 0:
+            tile_cropped = tile[y_offset:y_offset+original_shape_tile[0], x_offset:x_offset+original_shape_tile[1]]
+        else:
+            tile_cropped = tile[:original_shape_tile[0], :original_shape_tile[1]]
         
-        weight_mask = np.ones((end_y - start_y, end_x - start_x))
+        height, width = tile_cropped.shape
         
-        if start_y > 0:
-            for i in range(min(overlap, end_y - start_y)):
-                factor = ((i + 1) / (overlap + 1)) ** 2
-                weight_mask[i, :] = factor
-                    
-        if end_y < original_shape[0]:
-            for i in range(min(overlap, end_y - start_y)):
-                factor = ((i + 1) / (overlap + 1)) ** 2
-                weight_mask[-(i+1), :] = factor
-                    
-        if start_x > 0:
-            for i in range(min(overlap, end_x - start_x)):
-                factor = ((i + 1) / (overlap + 1)) ** 2
-                weight_mask[:, i] = factor
-                    
-        if end_x < original_shape[1]:
-            for i in range(min(overlap, end_x - start_x)):
-                factor = ((i + 1) / (overlap + 1)) ** 2
-                weight_mask[:, -(i+1)] = factor
+        if height <= 0 or width <= 0:
+            continue
         
-        result[start_y:end_y, start_x:end_x] += tile_cropped * weight_mask
-        weights[start_y:end_y, start_x:end_x] += weight_mask
+        weight_mask = np.ones((height, width))
+        
+        ramp_size = min(overlap, height // 4, 50)
+        for k in range(ramp_size):
+            factor = ((k + 1) / (ramp_size + 1)) ** 2
+            weight_mask[k, :] = factor
+            weight_mask[-(k+1), :] = factor
+            weight_mask[:, k] = factor
+            weight_mask[:, -(k+1)] = factor
+        
+        # Apply main tile portion
+        for sy in range(max(0, start_y), min(original_shape[0], end_y)):
+            for sx in range(max(0, start_x), min(original_shape[1], end_x)):
+                tile_y = sy - start_y
+                tile_x = sx - start_x
+                
+                if 0 <= tile_y < height and 0 <= tile_x < width:
+                    result[sy, sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                    weights[sy, sx] += weight_mask[tile_y, tile_x]
+        
+        # Apply wrapping portions if needed
+        if wrap_around:
+            # Left to right wrapping
+            if start_x < 0:
+                for sy in range(max(0, start_y), min(original_shape[0], end_y)):
+                    for sx in range(start_x, 0):
+                        wrap_sx = sx + original_shape[1]
+                        tile_y = sy - start_y
+                        tile_x = sx - start_x
+                        
+                        if 0 <= tile_y < height and 0 <= tile_x < width and 0 <= wrap_sx < original_shape[1]:
+                            result[sy, wrap_sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                            weights[sy, wrap_sx] += weight_mask[tile_y, tile_x]
+            
+            # Right to left wrapping
+            if end_x > original_shape[1]:
+                for sy in range(max(0, start_y), min(original_shape[0], end_y)):
+                    for sx in range(original_shape[1], end_x):
+                        wrap_sx = sx - original_shape[1]
+                        tile_y = sy - start_y
+                        tile_x = sx - start_x
+                        
+                        if 0 <= tile_y < height and 0 <= tile_x < width and 0 <= wrap_sx < original_shape[1]:
+                            result[sy, wrap_sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                            weights[sy, wrap_sx] += weight_mask[tile_y, tile_x]
+            
+            # Top to bottom wrapping
+            if start_y < 0:
+                for sx in range(max(0, start_x), min(original_shape[1], end_x)):
+                    for sy in range(start_y, 0):
+                        wrap_sy = sy + original_shape[0]
+                        tile_y = sy - start_y
+                        tile_x = sx - start_x
+                        
+                        if 0 <= tile_y < height and 0 <= tile_x < width and 0 <= wrap_sy < original_shape[0]:
+                            result[wrap_sy, sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                            weights[wrap_sy, sx] += weight_mask[tile_y, tile_x]
+            
+            # Bottom to top wrapping
+            if end_y > original_shape[0]:
+                for sx in range(max(0, start_x), min(original_shape[1], end_x)):
+                    for sy in range(original_shape[0], end_y):
+                        wrap_sy = sy - original_shape[0]
+                        tile_y = sy - start_y
+                        tile_x = sx - start_x
+                        
+                        if 0 <= tile_y < height and 0 <= tile_x < width and 0 <= wrap_sy < original_shape[0]:
+                            result[wrap_sy, sx] += tile_cropped[tile_y, tile_x] * weight_mask[tile_y, tile_x]
+                            weights[wrap_sy, sx] += weight_mask[tile_y, tile_x]
     
     with np.errstate(divide='ignore', invalid='ignore'):
         result = np.where(weights > 0, result / weights, 0)
     
     return result
+
+
 
 def estimate_memory_usage(shape, scale_factor, tile_size, overlap):
     height, width = shape
@@ -318,6 +482,7 @@ def main():
     parser.add_argument('--swap-dir', type=str, default=None, help='Directory for temporary swap files')
     parser.add_argument('--max-memory', type=float, default=None, help='Maximum memory usage in GB')
     parser.add_argument('--local-swap', action='store_true', help='Use script directory for swap files')
+    parser.add_argument('--no-wrap', action='store_true', help='Disable horizontal wrapping for non-planetary terrains')
     args = parser.parse_args()
     
     if args.quiet:
@@ -378,10 +543,11 @@ def main():
         
         tile_size = args.tile_size
         overlap = args.overlap
+        wrap_around = not args.no_wrap
         
         logger.info(f"Splitting into tiles with base size {tile_size}x{tile_size}...")
-        tiles, tile_positions, n_tiles_y, n_tiles_x, adjusted_tile_size, adjusted_overlap = split_into_tiles(
-            terrain, tile_size, overlap, args.scale, args.max_memory
+        tiles, tile_positions, n_tiles_y, n_tiles_x, adjusted_tile_size, adjusted_overlap, tile_metadata = split_into_tiles(
+            terrain, tile_size, overlap, args.scale, args.max_memory, wrap_around
         )
         logger.info(f"Created {len(tiles)} tiles ({n_tiles_x}x{n_tiles_y} grid) with adjusted size {adjusted_tile_size} and overlap {adjusted_overlap}")
         
@@ -411,6 +577,13 @@ def main():
                 scaled_tiles.append(scaled_tile)
                 scaled_positions.append((new_start_y, new_end_y, new_start_x, new_end_x))
                 
+                meta = tile_metadata[i]
+                meta['original_shape'] = (new_end_y - new_start_y, new_end_x - new_start_x)
+                meta['square_offsets'] = (
+                    (scaled_tile.shape[0] - (new_end_y - new_start_y)) // 2,
+                    (scaled_tile.shape[1] - (new_end_x - new_start_x)) // 2
+                )
+                
                 if args.verbose or (i % max(1, len(tiles) // 10) == 0):
                     logger.info(f"Scaled {i+1}/{len(tiles)} tiles")
             
@@ -421,7 +594,7 @@ def main():
             logger.info(f"New scaled shape: {original_shape}")
         else:
             original_shape = terrain.shape
-        
+            
         if 'scaled_tiles' in locals():
             del scaled_tiles 
         else:
@@ -441,7 +614,9 @@ def main():
         logger.info(f"Processing tiles using {num_processes} processes")
         
         process_args = [
-            (tiles[i], i, full_width, args.scale, adjusted_overlap, iterations, args.verbose, swap_dir)
+            (tiles[i], i, full_width, args.scale, adjusted_overlap, iterations, args.verbose, swap_dir,
+             tile_metadata[i]['is_wrap_x'], tile_metadata[i]['is_wrap_y'], 
+             tile_metadata[i]['wrap_x_tile_id'], tile_metadata[i]['wrap_y_tile_id'])
             for i in range(len(tiles))
         ]
         
@@ -454,14 +629,15 @@ def main():
         logger.info("Stitching tiles back together...")
         if args.swap:
             stitched_terrain = stitch_tiles_from_disk(results, tile_positions, original_shape, 
-                                                     n_tiles_y, n_tiles_x, adjusted_overlap, swap_dir)
+                                                     n_tiles_y, n_tiles_x, adjusted_overlap, swap_dir, 
+                                                     tile_metadata, wrap_around)
         else:
             processed_tiles = [None] * len(tile_positions)
-            for tile, tile_id in results:
-                processed_tiles[tile_id] = tile
+            for tile, tile_id, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id in results:
+                processed_tiles[tile_id] = (tile, tile_id, is_wrap_x, is_wrap_y, wrap_x_tile_id, wrap_y_tile_id)
             
             stitched_terrain = stitch_tiles(processed_tiles, tile_positions, original_shape, 
-                                         n_tiles_y, n_tiles_x, adjusted_overlap)
+                                         n_tiles_y, n_tiles_x, adjusted_overlap, tile_metadata, wrap_around)
             
             del processed_tiles
             gc.collect()
@@ -496,7 +672,7 @@ def main():
         logger.info(f"Files saved: {output_file}.png and {output_file}.npy")
         if os.path.exists(f"{output_file}_hillshade.png"):
             logger.info(f"Hillshade visualization: {output_file}_hillshade.png")
-        
+    
     except Exception as e:
         logger.error(f"Error in simulation: {e}")
         import traceback
