@@ -17,7 +17,7 @@ WorldMachina needs Python 3.7+, along with these libraries: PyGame for window ma
 First, clone the repository to your computer. I strongly recommend setting up a Python virtual environment to keep dependencies isolated and avoid conflicts with other projects:
 
 ```bash
-git https://github.com/SAED2906/WorldMachina.git
+git clone https://github.com/SAED2906/WorldMachina.git
 cd WorldMachina
 
 # Create a virtual environment
