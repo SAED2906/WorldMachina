@@ -16,7 +16,7 @@ class Planet:
         self.radius = radius
         self.detail = detail
         self.rotation = 0.0
-        self.rotation_speed = 0.0
+        self.rotation_speed = 1.0
         
         self.diffuse_texture = None
         self.height_texture = None
@@ -30,7 +30,7 @@ class Planet:
         self.bump_strength = 0.2
         
         try:
-            self._load_diffuse_texture("src/textures/planet/output6.png")
+            self._load_diffuse_texture("src/textures/planet/detailed_erosion_scale6.0_hillshade.png")
         except Exception as e:
             self.logger.warning(f"Could not load default planet texture: {e}")
     

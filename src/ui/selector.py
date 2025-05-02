@@ -32,6 +32,8 @@ class TextureSelector:
         self._init_ui()
         
         self.textures = self._find_textures()
+
+        self.show_selector = True
     
     def _init_ui(self):
         pygame.font.init()
@@ -133,6 +135,7 @@ class TextureSelector:
         
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.close_button["rect"].collidepoint(ui_x, ui_y):
+                self.show_selector = False
                 return True
             
             texture_list_rect = pygame.Rect(
@@ -185,6 +188,7 @@ class TextureSelector:
         self.celestial_coordinates[slider["key"]] = value
     
     def render(self, surface):
+        self.show_selector = True
         self.ui_surface.fill((0, 0, 0, 0))
         
         pygame.draw.rect(self.ui_surface, self.bg_color, 
@@ -292,3 +296,6 @@ class TextureSelector:
     
     def get_selection(self):
         return self.selected_texture, self.celestial_coordinates
+    
+    def get_state(self):
+        return self.show_selector

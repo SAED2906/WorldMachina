@@ -14,9 +14,10 @@ void main() {
         float h = texture2D(heightMap, texCoord).r;
         base.rgb = mix(base.rgb * 0.7, base.rgb * 1.3, h * heightScale);
     }
-    vec3 L = normalize(vec3(1.0, 1.0, 1.0));
-    float d = max(dot(normalize(normal), L), 0.0);
-    vec3 diff = d * base.rgb;
-    vec3 amb  = base.rgb * 0.3;
-    gl_FragColor = vec4(amb + diff, base.a);
+    // vec3 L = normalize(vec3(1.0, 1.0, 1.0));
+    // float d = max(dot(normalize(normal), L), 0.0);
+    // vec3 diff = d * base.rgb;
+    // vec3 amb  = base.rgb * 0.3;
+    // gl_FragColor = vec4(amb + diff, base.a);
+    gl_FragColor = vec4(base.rgb, base.a);
 }

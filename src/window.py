@@ -59,10 +59,10 @@ class Window:
         self.ui_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         
         try:
-            self.planet.load_height_map("src/textures/planet/output4.png")
+            self.planet.load_height_map("src/textures/planet/detailed_erosion_scale6.0.png")
             self.planet.set_bump_strength(0.2)
             self.planet.set_height_scale(0.05)
-            self.planet.use_height_map = False
+            self.planet.use_height_map = True
         except Exception as e:
             self.logger.warning(f"Could not load planet maps: {e}")
         
@@ -178,10 +178,10 @@ class Window:
                     self.logger.info(f"Height scale: {self.planet.height_scale:.2f}")
                 
                 elif event.key == pygame.K_UP:
-                    self.planet.set_sea_level(self.planet.sea_level + 0.05)
+                    self.planet.set_sea_level(self.planet.sea_level + 0.02)
                     self.logger.info(f"Sea level: {self.planet.sea_level:.2f}")
                 elif event.key == pygame.K_DOWN:
-                    self.planet.set_sea_level(self.planet.sea_level - 0.05)
+                    self.planet.set_sea_level(self.planet.sea_level - 0.02)
                     self.logger.info(f"Sea level: {self.planet.sea_level:.2f}")
 
                 elif event.key == pygame.K_o:
@@ -193,6 +193,7 @@ class Window:
             
             if self.show_selector:
                 if self.texture_selector.handle_event(event):
+                    self.show_selector = self.texture_selector.get_state()
                     selected_texture, coordinates = self.texture_selector.get_selection()
                     if selected_texture:
                         self.selected_skybox = selected_texture
@@ -211,7 +212,7 @@ class Window:
                 if event.button == 4:
                     self.camera_distance = max(0.1, self.camera_distance - 0.01)
                 elif event.button == 5:
-                    self.camera_distance = min(20.0, self.camera_distance + 0.5)
+                    self.camera_distance = min(20.0, self.camera_distance + 0.01)
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
@@ -335,7 +336,7 @@ class Window:
         glMatrixMode(GL_MODELVIEW)
     
     def _draw_ui_panels(self):
-        left_panel_width = 250
+        left_panel_width = 280
         left_panel = pygame.Surface((left_panel_width, self.height), pygame.SRCALPHA)
         left_panel.fill((0, 0, 0, 128))
         self.ui_surface.blit(left_panel, (0, 0))
@@ -350,22 +351,22 @@ class Window:
         left_panel_lines = [
             "CONTROLS:",
             "",
-            "Left mouse + drag: Rotate camera",
+            "Left mouse + drag: Rotate cam",
             "Mouse wheel: Zoom in/out",
             "S key: Skybox selector",
             "F11: Toggle fullscreen",
             "ESC: Quit",
             "",
             "SHADER CONTROLS:",
-            "N key: Toggle normal mapping",
-            "B key: Toggle bump mapping",
+            # "N key: Toggle normal mapping",
+            # "B key: Toggle bump mapping",
             "H key: Toggle height mapping",
-            "+/- keys: Adjust bump strength",
+            # "+/- keys: Adjust bump strength",
             "[/] keys: Adjust height scale",
             "",
             "OCEAN CONTROLS:",
-            "UP/DOWN arrows: Adjust sea level",
-            "O/P keys: Adjust ocean radius"
+            "UP/DOWN: Sea level",
+            "O/P keys: Ocean radius"
         ]
         
         y_offset = 30
@@ -380,9 +381,9 @@ class Window:
             right_panel_lines.extend([
                 "Shaders: Supported",
                 f"Height mapping: {'ON' if self.planet.use_height_map else 'OFF'}",
-                f"Height scale: {self.planet.height_scale:.2f}",
-                f"Sea level: {self.planet.sea_level:.2f}",
-                f"Ocean radius: {self.planet.ocean_radius:.2f}"
+                f"Height scale: {self.planet.height_scale:.3f}",
+                f"Sea level: {self.planet.sea_level:.3f}",
+                f"Ocean radius: {self.planet.ocean_radius:.3f}"
             ])
         else:
             right_panel_lines.append("Shaders: Not supported")
