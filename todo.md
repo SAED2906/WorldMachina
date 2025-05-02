@@ -115,3 +115,7 @@
 - [ ] Create intuitive parameter controls
 - [ ] Create export options for different formats
 - [ ] Create documentation and tutorials
+
+## Miscellaneous
+- [ ] Optional Traveller RPG Universal World Profile
+- [ ] .shp files?
