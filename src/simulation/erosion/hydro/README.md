@@ -107,5 +107,6 @@ python tiled_erosion.py heightmap.png --scale 16.0 --processes 8 --swap --local-
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the LICENSE file for details.
 
 ## Acknowledgments
-
+This implemtentation is uses alot from:
 - https://github.com/dandrino/terrain-erosion-3-ways
+The main improvements are memory handling, scaling and tiling.
