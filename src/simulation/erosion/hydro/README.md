@@ -2,6 +2,15 @@
 
 A ok~ish-performance, memory-efficient hydraulic erosion simulator for creating realistic terrain at massive scales.
 
+## Support the Project
+
+If you find this project useful for your TTRPG world-building, scientific visualization, or other creative endeavors, consider supporting the development:
+
+https://buymeacoffee.com/williammarais
+
+Also the devlog related to this section can be found here:
+https://buymeacoffee.com/williammarais/world-machina-dev-log-0
+
 ## Current Limitations
 <p align="center">
   <img src="heightmap_bwsqr.png" width="45%" alt="Input Heightmap">
